@@ -1,0 +1,20 @@
+services:
+  anki-chat:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_APP_NAME: "${NEXT_PUBLIC_APP_NAME:-Anki Chat}"
+        NEXT_PUBLIC_ENABLE_REASONING: "${NEXT_PUBLIC_ENABLE_REASONING:-true}"
+        NEXT_PUBLIC_ENABLE_TOOL_CALLS: "${NEXT_PUBLIC_ENABLE_TOOL_CALLS:-true}"
+        NEXT_PUBLIC_ENABLE_STT: "${NEXT_PUBLIC_ENABLE_STT:-true}"
+        NEXT_PUBLIC_ENABLE_TTS: "${NEXT_PUBLIC_ENABLE_TTS:-true}"
+        NEXT_PUBLIC_AUTO_PLAY_TTS: "${NEXT_PUBLIC_AUTO_PLAY_TTS:-false}"
+        NEXT_PUBLIC_CHAT_MAX_CONTEXT: "${NEXT_PUBLIC_CHAT_MAX_CONTEXT:-32768}"
+    container_name: anki-chat
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

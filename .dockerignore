@@ -1,0 +1,16 @@
+Dockerfile
+.dockerignore
+.git
+.gitignore
+.next
+node_modules
+data
+npm-debug.log*
+README.md
+ANKI_CHAT_IMPLEMENTATION.md
+*.test.ts
+vitest.config.ts
+coverage
+.env
+.env.*
+!.env.example
