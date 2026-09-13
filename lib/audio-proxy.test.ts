@@ -12,7 +12,7 @@ const baseConfig: ServerConfig = {
     authHeader: "Authorization",
     authScheme: "Bearer",
     maxSteps: 10,
-    maxContext: 32_768,
+    maxContext: 12_000,
   },
   mcp: {
     timeoutMs: 15_000,
@@ -29,11 +29,12 @@ const baseConfig: ServerConfig = {
     enabled: true,
   },
   tts: {
-    url: "http://localhost:8002/v1/audio/speech",
+    url: "http://localhost:8006/v1/audio/speech",
     apiKey: "tts-key",
-    model: "tts-1",
-    voice: "alloy",
-    format: "mp3",
+    voice: "vivian",
+    language: "Chinese",
+    taskType: "CustomVoice",
+    format: "wav",
     protocol: "openai-compatible",
     timeoutMs: 5000,
     maxChars: 100,
@@ -93,24 +94,25 @@ describe("TTS proxy client", () => {
     });
   });
 
-  it("forwards model/voice and returns audio bytes", async () => {
+  it("forwards the Qwen3-TTS request and returns audio bytes", async () => {
     const bytes = new Uint8Array([9, 8, 7]);
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
-      expect(JSON.parse(String(init?.body))).toMatchObject({
+      expect(JSON.parse(String(init?.body))).toEqual({
         input: "你好",
-        model: "tts-1",
-        voice: "alloy",
-        response_format: "mp3",
+        voice: "vivian",
+        language: "Chinese",
+        task_type: "CustomVoice",
+        response_format: "wav",
       });
       return new Response(bytes, {
         status: 200,
-        headers: { "Content-Type": "audio/mpeg" },
+        headers: { "Content-Type": "audio/wav" },
       });
     });
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await proxyTextToSpeech("你好", baseConfig);
-    expect(result.contentType).toBe("audio/mpeg");
+    expect(result.contentType).toBe("audio/wav");
     expect(new Uint8Array(result.body)).toEqual(bytes);
   });
 });

@@ -29,7 +29,7 @@ vi.mock("@/lib/config", () => ({
       authHeader: "Authorization",
       authScheme: "Bearer",
       maxSteps: 10,
-      maxContext: 32_768,
+      maxContext: 12_000,
     },
     mcp: {
       url: "http://localhost:8002/mcp",
@@ -85,7 +85,6 @@ describe("POST /api/chat", () => {
         parts: [
           { type: "text", text: "traditional" },
           { type: "text", text: "hsk-max: 4" },
-          { type: "text", text: "pinyin: on" },
           { type: "text", text: "Use the vocabulary tool" },
         ],
       },
@@ -104,6 +103,7 @@ describe("POST /api/chat", () => {
       expect.objectContaining({
         messageMetadata: expect.any(Function),
         sendReasoning: true,
+        originalMessages: messages,
       }),
     );
 
@@ -138,6 +138,72 @@ describe("POST /api/chat", () => {
     );
 
     const options = streamText.mock.calls[0]?.[0];
+    expect(options.prepareStep).toEqual(expect.any(Function));
+    const currentResponseMessages = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "new-call",
+            toolName: "sample_vocabulary",
+            input: {},
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "new-call",
+            toolName: "sample_vocabulary",
+            output: { type: "json", value: { current: true } },
+          },
+        ],
+      },
+    ];
+    expect(
+      options.prepareStep({
+        steps: [{ toolCalls: [{ toolName: "sample_vocabulary" }] }],
+        initialMessages: [
+          { role: "user", content: "next sentence" },
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: "Previous feedback." },
+              {
+                type: "tool-call",
+                toolCallId: "old-call",
+                toolName: "sample_vocabulary",
+                input: {},
+              },
+            ],
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: "old-call",
+                toolName: "sample_vocabulary",
+                output: { type: "json", value: { old: "large payload" } },
+              },
+            ],
+          },
+        ],
+        responseMessages: currentResponseMessages,
+      }),
+    ).toEqual({
+      messages: [
+        { role: "user", content: "next sentence" },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Previous feedback." }],
+        },
+        ...currentResponseMessages,
+      ],
+    });
     await options.onEnd();
     await options.onAbort();
     expect(close).toHaveBeenCalledOnce();
@@ -203,46 +269,109 @@ describe("POST /api/chat", () => {
     expect(connectMcp).not.toHaveBeenCalled();
   });
 
-  it("rejects an invalid pinyin setting", async () => {
-    const request = new Request("http://localhost/api/chat", {
-      method: "POST",
-      body: JSON.stringify({
-        messages: [{ id: "user-1", role: "user", parts: [{ type: "text", text: "hello" }] }],
-        showPinyin: "maybe",
-      }),
-    });
-
-    const response = await POST(request);
-    expect(response.status).toBe(400);
-    expect(connectMcp).not.toHaveBeenCalled();
-  });
-
-  it("prepends pinyin: off when showPinyin is false", async () => {
+  it("prunes prior practice rounds for the model but keeps full UI originalMessages", async () => {
     const messages = [
       {
-        id: "user-1",
+        id: "u1",
         role: "user",
-        parts: [{ type: "text", text: "next sentence" }],
+        parts: [{ type: "text", text: "first" }],
+      },
+      {
+        id: "a1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "sample_vocabulary",
+            toolCallId: "t1",
+            state: "output-available",
+            input: {},
+            output: {},
+          },
+        ],
+      },
+      {
+        id: "a2",
+        role: "assistant",
+        parts: [{ type: "text", text: "**第一句**" }],
+      },
+      {
+        id: "u2",
+        role: "user",
+        parts: [{ type: "text", text: "translation 1" }],
+      },
+      {
+        id: "a3",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "record_practice_evaluation",
+            toolCallId: "t2",
+            state: "output-available",
+            input: {},
+            output: {},
+          },
+        ],
+      },
+      {
+        id: "u3",
+        role: "user",
+        parts: [{ type: "text", text: "next" }],
+      },
+      {
+        id: "a4",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "sample_vocabulary",
+            toolCallId: "t3",
+            state: "output-available",
+            input: {},
+            output: {},
+          },
+        ],
+      },
+      {
+        id: "a5",
+        role: "assistant",
+        parts: [{ type: "text", text: "**第二句**" }],
+      },
+      {
+        id: "u4",
+        role: "user",
+        parts: [{ type: "text", text: "translation 2" }],
       },
     ];
+
     const request = new Request("http://localhost/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, showPinyin: false }),
+      body: JSON.stringify({ messages }),
     });
 
     const response = await POST(request);
     expect(response.status).toBe(200);
+
     expect(convertToModelMessages).toHaveBeenCalledWith([
+      messages[5],
+      messages[6],
+      messages[7],
       {
-        ...messages[0],
+        ...messages[8],
         parts: [
           { type: "text", text: "simplified" },
           { type: "text", text: "hsk-max: 3" },
-          { type: "text", text: "pinyin: off" },
-          { type: "text", text: "next sentence" },
+          { type: "text", text: "translation 2" },
         ],
       },
     ]);
+
+    expect(toUIMessageStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        originalMessages: messages,
+      }),
+    );
   });
 });

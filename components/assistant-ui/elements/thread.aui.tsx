@@ -1,6 +1,5 @@
 import { Reasoning } from "@/components/assistant/reasoning";
 import { VoiceInputControl } from "@/components/audio/voice-input-control";
-import type { ChineseScript } from "@/app/assistant";
 import { ContextUsageIndicator } from "@/components/assistant-ui/elements/context-usage";
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import { ToolFallback } from "@/components/assistant-ui/elements/tool-fallback.aui";
@@ -8,6 +7,7 @@ import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-ic
 import { Button } from "@/components/ui/button";
 import { useGlossStore } from "@/lib/dictionary/gloss-store";
 import { detectGlossLanguage, glossLanguageFromNavigator } from "@/lib/dictionary/language";
+import type { ChineseScript } from "@/lib/dictionary/script-convert";
 import { formatHskLevel, HSK_LEVELS, type HskLevel } from "@/lib/hsk-level";
 import type { ApiDictationAdapter } from "@/lib/stt/dictation-adapter";
 import { useSttAutoSend } from "@/lib/stt/preferences";
@@ -27,7 +27,6 @@ import {
 import {
   ArrowDownIcon,
   ArrowUpIcon,
-  AudioLinesIcon,
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -35,7 +34,6 @@ import {
   PencilIcon,
   RefreshCwIcon,
   SquareIcon,
-  StopCircleIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FC } from "react";
 
@@ -92,7 +90,7 @@ export const Thread: FC<ThreadProps> = ({
   enableStt = false,
   enableTts = false,
   enableReasoning = true,
-  maxContext = 32_768,
+  maxContext = 12_000,
   chineseScript,
   onChineseScriptChange,
   hskLevel,
@@ -133,7 +131,14 @@ export const Thread: FC<ThreadProps> = ({
 
           <div data-slot="aui_message-group" className="mb-14 flex flex-col gap-y-6 empty:hidden">
             <ThreadPrimitive.Messages>
-              {() => <ThreadMessage enableTts={enableTts} enableReasoning={enableReasoning} />}
+              {() => (
+                <ThreadMessage
+                  enableTts={enableTts}
+                  enableReasoning={enableReasoning}
+                  showPinyin={showPinyin}
+                  chineseScript={chineseScript}
+                />
+              )}
             </ThreadPrimitive.Messages>
           </div>
 
@@ -165,13 +170,22 @@ export const Thread: FC<ThreadProps> = ({
 const ThreadMessage: FC<{
   enableTts: boolean;
   enableReasoning: boolean;
-}> = ({ enableTts, enableReasoning }) => {
+  showPinyin: boolean;
+  chineseScript: ChineseScript;
+}> = ({ enableTts, enableReasoning, showPinyin, chineseScript }) => {
   const role = useAuiState((s) => s.message.role);
   const isEditing = useAuiState((s) => s.message.composer.isEditing);
 
   if (isEditing) return <EditComposer />;
   if (role === "user") return <UserMessage />;
-  return <AssistantMessage enableTts={enableTts} enableReasoning={enableReasoning} />;
+  return (
+    <AssistantMessage
+      enableTts={enableTts}
+      enableReasoning={enableReasoning}
+      showPinyin={showPinyin}
+      chineseScript={chineseScript}
+    />
+  );
 };
 
 const ThreadScrollToBottom: FC = () => {
@@ -364,14 +378,18 @@ const ComposerAction: FC<{
         </label>
         <label
           className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
-          title={showPinyin ? "Hide pinyin in tutor replies" : "Show pinyin in tutor replies"}
+          title={
+            showPinyin
+              ? "Pinyin unter chinesischen Zeilen ausblenden"
+              : "Pinyin unter chinesischen Zeilen einblenden"
+          }
         >
           <input
             type="checkbox"
             checked={showPinyin}
             onChange={(event) => onShowPinyinChange(event.target.checked)}
             disabled={disabled}
-            aria-label="Show pinyin in tutor replies"
+            aria-label="Pinyin unter chinesischen Zeilen ein- oder ausblenden"
             className="border-border/60 accent-foreground size-3.5 cursor-pointer rounded-sm disabled:cursor-not-allowed"
           />
           <span className="select-none">拼音</span>
@@ -448,7 +466,9 @@ const MessageError: FC = () => {
 const AssistantMessage: FC<{
   enableTts: boolean;
   enableReasoning: boolean;
-}> = ({ enableTts, enableReasoning }) => {
+  showPinyin: boolean;
+  chineseScript: ChineseScript;
+}> = ({ enableTts, enableReasoning, showPinyin, chineseScript }) => {
   const ACTION_BAR_PT = "pt-1.5";
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`;
   const messageId = useAuiState((s) => s.message.id);
@@ -501,7 +521,16 @@ const AssistantMessage: FC<{
               return enableReasoning ? <Reasoning /> : null;
             }
             if (part.type === "text")
-              return <MarkdownText messageId={messageId} messageText={messageText} />;
+              return (
+                <MarkdownText
+                  messageId={messageId}
+                  messageText={messageText}
+                  enableSpeak={enableTts}
+                  showPinyin={showPinyin}
+                  chineseScript={chineseScript}
+                  enableScriptConvert={messageStatus !== "running"}
+                />
+              );
             if (part.type === "tool-call") return part.toolUI ?? <ToolFallback {...part} />;
             return null;
           }}
@@ -525,37 +554,19 @@ const AssistantMessage: FC<{
         className={cn("ms-2 flex items-center", ACTION_BAR_HEIGHT)}
       >
         <BranchPicker />
-        <AssistantActionBar enableTts={enableTts} />
+        <AssistantActionBar />
       </div>
     </MessagePrimitive.Root>
   );
 };
 
-const AssistantActionBar: FC<{ enableTts: boolean }> = ({ enableTts }) => {
+const AssistantActionBar: FC = () => {
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
       className="aui-assistant-action-bar-root text-muted-foreground animate-in fade-in col-start-3 row-start-2 -ms-1 flex gap-1 duration-200"
     >
-      {enableTts ? (
-        <>
-          <AuiIf condition={(s) => s.message.speech == null}>
-            <ActionBarPrimitive.Speak asChild>
-              <TooltipIconButton tooltip="Speak">
-                <AudioLinesIcon />
-              </TooltipIconButton>
-            </ActionBarPrimitive.Speak>
-          </AuiIf>
-          <AuiIf condition={(s) => s.message.speech != null}>
-            <ActionBarPrimitive.StopSpeaking asChild>
-              <TooltipIconButton tooltip="Stop speaking">
-                <StopCircleIcon />
-              </TooltipIconButton>
-            </ActionBarPrimitive.StopSpeaking>
-          </AuiIf>
-        </>
-      ) : null}
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton tooltip="Copy">
           <AuiIf condition={(s) => s.message.isCopied}>

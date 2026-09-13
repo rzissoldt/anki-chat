@@ -75,9 +75,14 @@ export const ContextUsageIndicator: FC<ContextUsageProps> = ({ maxContext }) => 
   });
   const extras = useMemo(() => readExtras(latestMetadata), [latestMetadata]);
 
-  const contextUsed = extras?.contextTokens ?? usage?.inputTokens ?? usage?.totalTokens ?? 0;
-  const percent = maxContext > 0 ? Math.min(100, Math.round((contextUsed / maxContext) * 100)) : 0;
-  const hasUsage = Boolean(usage) || extras?.contextTokens !== undefined;
+  // Window fill = last model step input tokens only (not turn totals).
+  const contextUsed = extras?.contextTokens;
+  const percent =
+    contextUsed !== undefined && maxContext > 0
+      ? Math.min(100, Math.round((contextUsed / maxContext) * 100))
+      : 0;
+  const hasWindow = contextUsed !== undefined;
+  const hasTurnUsage = Boolean(usage);
 
   const radius = 10;
   const circumference = 2 * Math.PI * radius;
@@ -127,16 +132,16 @@ export const ContextUsageIndicator: FC<ContextUsageProps> = ({ maxContext }) => 
         >
           <div className="mb-0.5 flex items-center justify-between gap-4 font-medium">
             <span>Context</span>
-            <span className="tabular-nums">{percent}%</span>
+            <span className="tabular-nums">{hasWindow ? `${percent}%` : "—"}</span>
           </div>
           <UsageRow
-            label="Used"
+            label="Window"
             value={`${formatTokens(contextUsed)} / ${formatTokens(maxContext)}`}
           />
-          {hasUsage ? (
+          {hasTurnUsage ? (
             <>
-              <UsageRow label="Input" value={formatTokens(usage?.inputTokens)} />
-              <UsageRow label="Output" value={formatTokens(usage?.outputTokens)} />
+              <UsageRow label="Turn input" value={formatTokens(usage?.inputTokens)} />
+              <UsageRow label="Turn output" value={formatTokens(usage?.outputTokens)} />
               {usage?.reasoningTokens !== undefined ? (
                 <UsageRow label="Reasoning" value={formatTokens(usage.reasoningTokens)} />
               ) : null}
@@ -144,16 +149,17 @@ export const ContextUsageIndicator: FC<ContextUsageProps> = ({ maxContext }) => 
                 <UsageRow label="Cached" value={formatTokens(usage.cachedInputTokens)} />
               ) : null}
               <UsageRow label="Turn total" value={formatTokens(usage?.totalTokens)} />
-              {extras?.toolCallCount !== undefined ? (
-                <UsageRow label="Tool calls" value={String(extras.toolCallCount)} />
-              ) : null}
-              {extras?.agentSteps !== undefined && extras.agentSteps > 0 ? (
-                <UsageRow label="Agent steps" value={String(extras.agentSteps)} />
-              ) : null}
             </>
-          ) : (
+          ) : null}
+          {extras?.toolCallCount !== undefined ? (
+            <UsageRow label="Tool calls" value={String(extras.toolCallCount)} />
+          ) : null}
+          {extras?.agentSteps !== undefined && extras.agentSteps > 0 ? (
+            <UsageRow label="Agent steps" value={String(extras.agentSteps)} />
+          ) : null}
+          {!hasWindow && !hasTurnUsage ? (
             <p className="text-background/70">Token usage appears after the first reply.</p>
-          )}
+          ) : null}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

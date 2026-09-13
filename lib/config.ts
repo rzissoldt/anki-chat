@@ -22,7 +22,7 @@ const serverEnvSchema = z.object({
   MCP_AUTH_TOKEN: z.preprocess(emptyToUndefined, z.string().optional()),
   MCP_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   AGENT_MAX_STEPS: z.coerce.number().int().min(1).max(50).default(10),
-  CHAT_MAX_CONTEXT: z.coerce.number().int().positive().default(32_768),
+  CHAT_MAX_CONTEXT: z.coerce.number().int().positive().default(12_000),
 
   STT_API_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
   STT_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
@@ -40,6 +40,8 @@ const serverEnvSchema = z.object({
   TTS_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
   TTS_MODEL: z.preprocess(emptyToUndefined, z.string().optional()),
   TTS_VOICE: z.preprocess(emptyToUndefined, z.string().optional()),
+  TTS_LANGUAGE: z.preprocess(emptyToUndefined, z.string().optional()),
+  TTS_TASK_TYPE: z.preprocess(emptyToUndefined, z.string().optional()),
   TTS_FORMAT: z.preprocess(emptyToUndefined, z.string().default("mp3")),
   TTS_PROTOCOL: z.preprocess(emptyToUndefined, z.string().default("openai-compatible")),
   TTS_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
@@ -79,6 +81,8 @@ export type ServerConfig = {
     apiKey?: string;
     model?: string;
     voice?: string;
+    language?: string;
+    taskType?: string;
     format: string;
     protocol: string;
     timeoutMs: number;
@@ -149,6 +153,8 @@ export function getServerConfig(): ServerConfig {
       apiKey: env.TTS_API_KEY,
       model: env.TTS_MODEL,
       voice: env.TTS_VOICE,
+      language: env.TTS_LANGUAGE,
+      taskType: env.TTS_TASK_TYPE,
       format: env.TTS_FORMAT,
       protocol: env.TTS_PROTOCOL,
       timeoutMs: env.TTS_TIMEOUT_MS,
@@ -193,7 +199,7 @@ export function getPublicFeatureFlags() {
     enableStt,
     enableTts,
     autoPlayTts: autoPlayTts.success ? autoPlayTts.data : false,
-    maxContext: maxContext.success ? maxContext.data : 32_768,
+    maxContext: maxContext.success ? maxContext.data : 12_000,
   };
 }
 

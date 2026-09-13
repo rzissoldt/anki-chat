@@ -3,14 +3,15 @@
 import { Thread } from "@/components/assistant-ui/elements/thread.aui";
 import { Button } from "@/components/ui/button";
 import { useClientFeatures } from "@/lib/features";
+import type { ChineseScript } from "@/lib/dictionary/script-convert";
+import { useScriptConvertStore } from "@/lib/dictionary/script-convert-store";
 import { DEFAULT_HSK_LEVEL, type HskLevel } from "@/lib/hsk-level";
 import { ApiDictationAdapter } from "@/lib/stt/dictation-adapter";
-import { ApiSpeechSynthesisAdapter } from "@/lib/tts/speech-adapter";
 import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/ai-sdk";
 import { AssistantRuntimeProvider, useAui } from "@assistant-ui/react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-export type ChineseScript = "simplified" | "traditional";
+export type { ChineseScript };
 
 function ChatHeader({ appName, onNewChat }: { appName: string; onNewChat: () => void }) {
   return (
@@ -91,7 +92,6 @@ export const Assistant = () => {
   const [hskLevel, setHskLevel] = useState<HskLevel>(DEFAULT_HSK_LEVEL);
   const hskLevelRef = useRef(hskLevel);
   const [showPinyin, setShowPinyin] = useState(true);
-  const showPinyinRef = useRef(showPinyin);
 
   const handleChineseScriptChange = useCallback((script: ChineseScript) => {
     chineseScriptRef.current = script;
@@ -104,14 +104,13 @@ export const Assistant = () => {
   }, []);
 
   const handleShowPinyinChange = useCallback((show: boolean) => {
-    showPinyinRef.current = show;
     setShowPinyin(show);
   }, []);
 
-  const speechAdapter = useMemo(
-    () => (features.tts ? new ApiSpeechSynthesisAdapter("/api/tts") : undefined),
-    [features.tts],
-  );
+  useEffect(() => {
+    void useScriptConvertStore.getState().ensureLoaded();
+  }, []);
+
   const dictationAdapter = useMemo(
     () => (features.stt ? new ApiDictationAdapter("/api/stt") : undefined),
     [features.stt],
@@ -125,18 +124,11 @@ export const Assistant = () => {
           body: () => ({
             chineseScript: chineseScriptRef.current,
             hskLevel: hskLevelRef.current,
-            showPinyin: showPinyinRef.current,
           }),
         }),
       [],
     ),
-    adapters:
-      speechAdapter || dictationAdapter
-        ? {
-            ...(speechAdapter ? { speech: speechAdapter } : {}),
-            ...(dictationAdapter ? { dictation: dictationAdapter } : {}),
-          }
-        : undefined,
+    adapters: dictationAdapter ? { dictation: dictationAdapter } : undefined,
   });
 
   return (

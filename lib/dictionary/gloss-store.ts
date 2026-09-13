@@ -44,7 +44,8 @@ export const useGlossStore = create<GlossStore>((set, get) => ({
   async annotateMessage(messageId, text, lang, signal) {
     const cached = get().getGloss(messageId, text, lang);
     if (cached?.text === text && cached.lang === lang && cached.status === "ready") {
-      if (!get().messages[messageId] || get().messages[messageId]?.lang !== lang) {
+      const current = get().messages[messageId];
+      if (!current || current.lang !== lang || current.text !== text || current !== cached) {
         set((state) => ({
           messages: { ...state.messages, [messageId]: cached },
         }));

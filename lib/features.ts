@@ -12,7 +12,7 @@ export type ClientFeatures = {
 };
 
 const DEFAULT_MAX_CONTEXT = Number.parseInt(
-  process.env.NEXT_PUBLIC_CHAT_MAX_CONTEXT || "32768",
+  process.env.NEXT_PUBLIC_CHAT_MAX_CONTEXT || "12000",
   10,
 );
 
@@ -23,7 +23,7 @@ const DEFAULT_FEATURES: ClientFeatures = {
   toolCalls: process.env.NEXT_PUBLIC_ENABLE_TOOL_CALLS !== "false",
   appName: process.env.NEXT_PUBLIC_APP_NAME || "Anki Chat",
   maxContext:
-    Number.isFinite(DEFAULT_MAX_CONTEXT) && DEFAULT_MAX_CONTEXT > 0 ? DEFAULT_MAX_CONTEXT : 32_768,
+    Number.isFinite(DEFAULT_MAX_CONTEXT) && DEFAULT_MAX_CONTEXT > 0 ? DEFAULT_MAX_CONTEXT : 12_000,
 };
 
 export function useClientFeatures() {

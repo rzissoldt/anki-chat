@@ -1,5 +1,10 @@
 import { getServerConfig } from "@/lib/config";
 import { createVllmModel } from "@/lib/ai/vllm";
+import {
+  hasPracticeSamplingCall,
+  prunePracticeContext,
+  stripHistoricalToolPayloads,
+} from "@/lib/chat/prune-practice-context";
 import { DEFAULT_HSK_LEVEL, isHskLevel, type HskLevel } from "@/lib/hsk-level";
 import { connectMcp } from "@/lib/mcp/client";
 import { systemPrompt } from "@/lib/system-prompt";
@@ -21,7 +26,6 @@ type ClientChatBody = {
   messages?: UIMessage[];
   chineseScript?: unknown;
   hskLevel?: unknown;
-  showPinyin?: unknown;
 };
 
 type ChineseScript = "simplified" | "traditional";
@@ -30,7 +34,6 @@ function prependUserControls(
   messages: UIMessage[],
   script: ChineseScript,
   hskLevel: HskLevel,
-  showPinyin: boolean,
 ): UIMessage[] {
   const lastUserMessageIndex = messages.findLastIndex((message) => message.role === "user");
 
@@ -41,7 +44,6 @@ function prependUserControls(
           parts: [
             { type: "text" as const, text: script },
             { type: "text" as const, text: `hsk-max: ${hskLevel}` },
-            { type: "text" as const, text: `pinyin: ${showPinyin ? "on" : "off"}` },
             ...message.parts,
           ],
         }
@@ -71,11 +73,6 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid HSK level" }, { status: 400 });
   }
 
-  const showPinyin = body.showPinyin ?? true;
-  if (typeof showPinyin !== "boolean") {
-    return Response.json({ error: "Invalid pinyin setting" }, { status: 400 });
-  }
-
   let mcp: Awaited<ReturnType<typeof connectMcp>> = null;
 
   try {
@@ -97,10 +94,20 @@ export async function POST(req: Request) {
       model,
       system: systemPrompt,
       messages: await convertToModelMessages(
-        prependUserControls(body.messages, chineseScript, hskLevel, showPinyin),
+        prependUserControls(prunePracticeContext(body.messages), chineseScript, hskLevel),
       ),
       tools,
       stopWhen: stepCountIs(config.chat.maxSteps),
+      prepareStep({ steps, initialMessages, responseMessages }) {
+        if (!hasPracticeSamplingCall(steps)) return undefined;
+
+        return {
+          // Drop completed-round tool payloads immediately inside this request.
+          // Keep lightweight chat text plus every call/result used to build the
+          // new sentence in the current response.
+          messages: [...stripHistoricalToolPayloads(initialMessages), ...responseMessages],
+        };
+      },
       abortSignal: req.signal,
       onEnd: closeMcp,
       onAbort: closeMcp,

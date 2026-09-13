@@ -25,6 +25,8 @@ export async function proxyTextToSpeech(
   };
   if (config.tts.model) payload.model = config.tts.model;
   if (config.tts.voice) payload.voice = config.tts.voice;
+  if (config.tts.language) payload.language = config.tts.language;
+  if (config.tts.taskType) payload.task_type = config.tts.taskType;
   if (config.tts.format) payload.response_format = config.tts.format;
 
   const controller = new AbortController();

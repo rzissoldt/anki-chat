@@ -8,7 +8,7 @@ export async function GET() {
   let mcpConfigured = false;
   let sttConfigured = false;
   let ttsConfigured = false;
-  let maxContext = 32_768;
+  let maxContext = 12_000;
 
   try {
     const config = getServerConfig();

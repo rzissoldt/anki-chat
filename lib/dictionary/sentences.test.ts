@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   annotateSentences,
   extractChineseSentences,
+  extractSpeakableChineseSentences,
   findEnclosingSentence,
+  isSpeakableChineseSentence,
 } from "@/lib/dictionary/sentences";
 
 describe("extractChineseSentences", () => {
@@ -59,5 +61,33 @@ describe("extractChineseSentences", () => {
   it("finds the enclosing sentence for a word span", () => {
     const sentences = annotateSentences("我喜欢中国。", []);
     expect(findEnclosingSentence(sentences, 1, 3)?.surface).toBe("我喜欢中国。");
+  });
+});
+
+describe("speakable Chinese sentences", () => {
+  it("accepts terminated sentences and rejects bare vocabulary", () => {
+    expect(isSpeakableChineseSentence("我喜欢中国。")).toBe(true);
+    expect(isSpeakableChineseSentence("你呢？")).toBe(true);
+    expect(isSpeakableChineseSentence("中国")).toBe(false);
+    expect(isSpeakableChineseSentence("好。")).toBe(false);
+  });
+
+  it("filters mixed text down to terminated Chinese sentences", () => {
+    const text = "Word: 中国. Sentence: 我喜欢中国。 Also 你好！";
+    expect(extractSpeakableChineseSentences(text).map((sentence) => sentence.surface)).toEqual([
+      "我喜欢中国。",
+      "你好！",
+    ]);
+  });
+
+  it("keeps Chinese commas inside one speakable sentence", () => {
+    const text = "主角是爸爸，为了看水手比赛，他不到五点就起床了。";
+    expect(extractSpeakableChineseSentences(text)).toEqual([
+      {
+        surface: "主角是爸爸，为了看水手比赛，他不到五点就起床了。",
+        start: 0,
+        end: text.length,
+      },
+    ]);
   });
 });

@@ -9,7 +9,7 @@ services:
         NEXT_PUBLIC_ENABLE_STT: "${NEXT_PUBLIC_ENABLE_STT:-true}"
         NEXT_PUBLIC_ENABLE_TTS: "${NEXT_PUBLIC_ENABLE_TTS:-true}"
         NEXT_PUBLIC_AUTO_PLAY_TTS: "${NEXT_PUBLIC_AUTO_PLAY_TTS:-false}"
-        NEXT_PUBLIC_CHAT_MAX_CONTEXT: "${NEXT_PUBLIC_CHAT_MAX_CONTEXT:-32768}"
+        NEXT_PUBLIC_CHAT_MAX_CONTEXT: "${NEXT_PUBLIC_CHAT_MAX_CONTEXT:-12000}"
     container_name: anki-chat
     restart: unless-stopped
     ports:
