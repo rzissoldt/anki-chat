@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   serverExternalPackages: ["jieba-wasm"],
   outputFileTracingIncludes: {
-    "/api/chat": ["./Systemprompt.md"],
+    "/api/chat": ["./Systemprompt.md", "./Systemprompt.lesson.md"],
     "/api/dictionary/*": [
       "./data/cedict_ts.u8",
       "./data/handedict.u8",

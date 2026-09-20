@@ -2,6 +2,8 @@ import { tokenize } from "jieba-wasm";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { GlossLanguage } from "@/lib/dictionary/language";
+import { annotateReverseText, indexKeys } from "@/lib/dictionary/reverse-gloss";
+import type { TextSpan } from "@/lib/dictionary/practice-spans";
 
 export type DictionaryEntry = {
   traditional: string;
@@ -59,11 +61,13 @@ export function cleanDefinition(definition: string): string {
 export class CedictDictionary {
   private readonly root: TrieNode = { children: new Map() };
   private readonly entriesByWord = new Map<string, DictionaryEntry[]>();
+  private readonly entriesByGloss = new Map<string, DictionaryEntry[]>();
 
   constructor(entries: Iterable<DictionaryEntry>) {
     for (const entry of entries) {
       this.addWord(entry.simplified, entry);
       if (entry.traditional !== entry.simplified) this.addWord(entry.traditional, entry);
+      this.addReverseKeys(entry);
     }
   }
 
@@ -102,6 +106,31 @@ export class CedictDictionary {
     return annotations;
   }
 
+  /**
+   * Longest-match L1 (German/English) tokens against reversed dictionary glosses.
+   * Optional `spans` limit the search to production practice prompt lines.
+   */
+  annotateReverse(text: string, spans?: TextSpan[]): DictionaryAnnotation[] {
+    if (!text) return [];
+
+    const windows = spans?.length ? spans : [{ start: 0, end: text.length }];
+    const annotations: DictionaryAnnotation[] = [];
+
+    for (const span of windows) {
+      const slice = text.slice(span.start, span.end);
+      if (!slice) continue;
+      for (const local of annotateReverseText(slice, (key) => this.entriesByGloss.get(key))) {
+        annotations.push({
+          ...local,
+          start: span.start + local.start,
+          end: span.start + local.end,
+        });
+      }
+    }
+
+    return annotations;
+  }
+
   private annotateLongestMatch(text: string): DictionaryAnnotation[] {
     const annotations: DictionaryAnnotation[] = [];
     let cursor = 0;
@@ -126,6 +155,16 @@ export class CedictDictionary {
     }
 
     return annotations;
+  }
+
+  private addReverseKeys(entry: DictionaryEntry) {
+    for (const definition of entry.definitions) {
+      for (const key of indexKeys(definition)) {
+        const existing = this.entriesByGloss.get(key);
+        if (existing) existing.push(entry);
+        else this.entriesByGloss.set(key, [entry]);
+      }
+    }
   }
 
   private addWord(word: string, entry: DictionaryEntry) {

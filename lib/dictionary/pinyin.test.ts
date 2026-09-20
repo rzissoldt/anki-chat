@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DictionaryAnnotation } from "@/lib/dictionary/cedict";
 import {
   buildTonePinyin,
+  getPlainText,
   isChineseDominantLine,
   syllableToToneMarks,
   toToneMarks,
@@ -35,6 +36,24 @@ describe("isChineseDominantLine", () => {
     expect(isChineseDominantLine("他打算坐火车去北京。")).toBe(true);
     expect(isChineseDominantLine("Übersetze den Satz **中国** bitte.")).toBe(false);
     expect(isChineseDominantLine("我")).toBe(false);
+  });
+});
+
+describe("getPlainText", () => {
+  it("skips italic grammar-hint nodes so tip wording does not spoil Chinese detection", () => {
+    const children = [
+      { props: { children: "如果明天下雨，我就不去公园。" } },
+      " — ",
+      {
+        type: "em",
+        props: {
+          children: "Bedingung mit 如果 … 就",
+        },
+      },
+    ];
+    const plain = getPlainText(children);
+    expect(plain).toBe("如果明天下雨，我就不去公园。 — ");
+    expect(isChineseDominantLine(plain)).toBe(true);
   });
 });
 

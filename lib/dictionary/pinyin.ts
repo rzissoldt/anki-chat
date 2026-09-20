@@ -51,12 +51,7 @@ export function syllableToToneMarks(syllable: string): string {
 
 /** Convert CEDICT numbered pinyin (`Zhong1 guo2`) to tone marks (`Zhōng guó`). */
 export function toToneMarks(numbered: string): string {
-  return numbered
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map(syllableToToneMarks)
-    .join(" ");
+  return numbered.trim().split(/\s+/).filter(Boolean).map(syllableToToneMarks).join(" ");
 }
 
 /**
@@ -74,11 +69,24 @@ export function isChineseDominantLine(text: string): boolean {
   return hanChars.length >= latinChars.length * 2;
 }
 
+function isEmphasisNode(node: object): boolean {
+  const type = "type" in node ? (node as { type: unknown }).type : undefined;
+  if (type === "em" || type === "i") return true;
+  if (typeof type === "function" && (type.name === "em" || type.name === "Emphasis")) return true;
+  const props =
+    "props" in node ? (node as { props?: { node?: { tagName?: string } } }).props : undefined;
+  const tagName = props?.node?.tagName;
+  return tagName === "em" || tagName === "i";
+}
+
 function plainTextFromNode(node: unknown): string {
   if (node == null || typeof node === "boolean") return "";
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(plainTextFromNode).join("");
   if (typeof node === "object" && node !== null && "props" in node) {
+    // Grammar tips render as italic markdown; exclude them so German wording
+    // does not spoil Chinese-dominant detection for pinyin lines.
+    if (isEmphasisNode(node)) return "";
     const props = (node as { props?: { children?: unknown } }).props;
     return plainTextFromNode(props?.children);
   }
@@ -96,10 +104,7 @@ const KEEP_PUNCTUATION = /[，、：；。！？!?,.…—\-·（）()《》〈�
  * Walk `text` matching annotation surfaces (longest-first preferred via caller sort)
  * and join tone-mark pinyin. Returns null when nothing matched.
  */
-export function buildTonePinyin(
-  text: string,
-  segments: DictionaryAnnotation[],
-): string | null {
+export function buildTonePinyin(text: string, segments: DictionaryAnnotation[]): string | null {
   if (!text || segments.length === 0) return null;
 
   const parts: string[] = [];

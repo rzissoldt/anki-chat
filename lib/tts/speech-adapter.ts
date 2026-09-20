@@ -27,11 +27,7 @@ function setCachedAudio(text: string, blob: Blob) {
   }
 }
 
-async function fetchAudioBlob(
-  apiUrl: string,
-  text: string,
-  signal: AbortSignal,
-): Promise<Blob> {
+async function fetchAudioBlob(apiUrl: string, text: string, signal: AbortSignal): Promise<Blob> {
   const cached = getCachedAudio(text);
   if (cached) return cached;
 

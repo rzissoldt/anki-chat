@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   let chatConfigured = false;
   let mcpConfigured = false;
+  let statsConfigured = false;
   let sttConfigured = false;
   let ttsConfigured = false;
   let maxContext = 12_000;
@@ -14,6 +15,7 @@ export async function GET() {
     const config = getServerConfig();
     chatConfigured = Boolean(config.chat.url && config.chat.model);
     mcpConfigured = config.mcp.enabled;
+    statsConfigured = config.stats.enabled;
     sttConfigured = config.stt.enabled;
     ttsConfigured = config.tts.enabled;
     maxContext = config.chat.maxContext;
@@ -28,6 +30,7 @@ export async function GET() {
     features: {
       chat: chatConfigured,
       mcp: mcpConfigured,
+      stats: statsConfigured,
       stt: sttConfigured && flags.enableStt,
       tts: ttsConfigured && flags.enableTts,
       reasoning: flags.enableReasoning,

@@ -100,4 +100,43 @@ describe("CC-CEDICT", () => {
     expect(dictionary.lookup("喜欢")[0].traditional).toBe("喜歡");
     expect(dictionary.lookup("喜歡")[0].simplified).toBe("喜欢");
   });
+
+  it("reverse-looks up German glosses as Chinese annotations", () => {
+    const dictionary = new CedictDictionary([
+      ...entries,
+      {
+        traditional: "茶",
+        simplified: "茶",
+        pinyin: "cha2",
+        definitions: ["Tee"],
+      },
+    ]);
+
+    expect(dictionary.annotateReverse("Bitte Tee trinken.")).toEqual([
+      {
+        surface: "Tee",
+        start: 6,
+        end: 9,
+        pinyin: "cha2",
+        definitions: ["茶"],
+      },
+    ]);
+  });
+
+  it("limits reverse lookup to the given spans", () => {
+    const dictionary = new CedictDictionary([
+      {
+        traditional: "茶",
+        simplified: "茶",
+        pinyin: "cha2",
+        definitions: ["Tee"],
+      },
+    ]);
+
+    expect(
+      dictionary
+        .annotateReverse("Tee bitte. Tee nochmal.", [{ start: 0, end: 10 }])
+        .map((item) => item.start),
+    ).toEqual([0]);
+  });
 });

@@ -85,6 +85,7 @@ describe("POST /api/chat", () => {
         parts: [
           { type: "text", text: "traditional" },
           { type: "text", text: "hsk-max: 4" },
+          { type: "text", text: "grammar-tips: on" },
           { type: "text", text: "Use the vocabulary tool" },
         ],
       },
@@ -269,6 +270,103 @@ describe("POST /api/chat", () => {
     expect(connectMcp).not.toHaveBeenCalled();
   });
 
+  it("rejects an invalid grammarTips flag", async () => {
+    const request = new Request("http://localhost/api/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        messages: [{ id: "user-1", role: "user", parts: [{ type: "text", text: "hello" }] }],
+        grammarTips: "yes",
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(400);
+    expect(connectMcp).not.toHaveBeenCalled();
+  });
+
+  it("prepends grammar-tips: off when grammarTips is false", async () => {
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "hello" }],
+      },
+    ];
+    const request = new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages, grammarTips: false }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+    expect(convertToModelMessages).toHaveBeenCalledWith([
+      {
+        ...messages[0],
+        parts: [
+          { type: "text", text: "simplified" },
+          { type: "text", text: "hsk-max: 3" },
+          { type: "text", text: "grammar-tips: off" },
+          { type: "text", text: "hello" },
+        ],
+      },
+    ]);
+  });
+
+  it("prepends practice-mode from full thread history before pruning", async () => {
+    const messages = [
+      {
+        id: "u0",
+        role: "user",
+        parts: [{ type: "text", text: "old round" }],
+      },
+      {
+        id: "eval",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "record_practice_evaluation",
+            toolCallId: "e1",
+            state: "output-available",
+            input: { mode: "production" },
+            output: {},
+          },
+        ],
+      },
+      {
+        id: "a1",
+        role: "assistant",
+        parts: [{ type: "text", text: "1. **他在写。**" }],
+      },
+      {
+        id: "u1",
+        role: "user",
+        parts: [
+          {
+            type: "text",
+            text: "Weiter (wieder 4 Sätze, Deutsch → Chinesisch: deutsche Sätze vorgeben)",
+          },
+        ],
+      },
+    ];
+
+    const request = new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+
+    const modelMessages = vi.mocked(convertToModelMessages).mock.calls.at(0)?.at(0) as
+      | Array<{ parts?: Array<{ text?: string }> }>
+      | undefined;
+    const lastUserParts = modelMessages?.at(-1)?.parts?.map((p) => p.text);
+    expect(lastUserParts).toContain("practice-mode: production");
+  });
+
   it("prunes prior practice rounds for the model but keeps full UI originalMessages", async () => {
     const messages = [
       {
@@ -363,6 +461,8 @@ describe("POST /api/chat", () => {
         parts: [
           { type: "text", text: "simplified" },
           { type: "text", text: "hsk-max: 3" },
+          { type: "text", text: "grammar-tips: on" },
+          { type: "text", text: "practice-mode: recognition" },
           { type: "text", text: "translation 2" },
         ],
       },
@@ -373,5 +473,90 @@ describe("POST /api/chat", () => {
         originalMessages: messages,
       }),
     );
+  });
+
+  it("prepends lesson control lines and pins structure sampling", async () => {
+    const frameExecute = vi.fn(async (input: unknown) => input);
+    const focusExecute = vi.fn(async (input: unknown) => input);
+    connectMcp.mockResolvedValue({
+      client: { close },
+      tools: {
+        sample_sentence_frame: { execute: frameExecute },
+        sample_focus_structure: { execute: focusExecute },
+        sample_vocabulary: { execute: vi.fn() },
+        find_related_vocabulary: { execute: vi.fn() },
+        inspect_vocabulary: { execute: vi.fn() },
+        record_practice_evaluation: { execute: vi.fn() },
+      },
+    });
+
+    const messages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "Starte Übersetzung" }],
+      },
+    ];
+    const request = new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages,
+        lesson: true,
+        ankiVocab: false,
+        structureIds: [11, 12],
+        frameIds: [11],
+        focusIds: [12],
+        hskLevel: 3,
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+    expect(convertToModelMessages).toHaveBeenCalledWith([
+      {
+        ...messages[0],
+        parts: [
+          { type: "text", text: "simplified" },
+          { type: "text", text: "hsk-max: 3" },
+          { type: "text", text: "grammar-tips: on" },
+          { type: "text", text: "lesson: on" },
+          { type: "text", text: "anki-vocab: off" },
+          { type: "text", text: "Starte Übersetzung" },
+        ],
+      },
+    ]);
+    expect(streamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: expect.stringContaining("vorbereiteten Lesson"),
+        tools: expect.objectContaining({
+          sample_sentence_frame: expect.anything(),
+          sample_focus_structure: expect.anything(),
+          record_practice_evaluation: expect.anything(),
+        }),
+      }),
+    );
+    const options = streamText.mock.calls[0]?.[0] as {
+      tools: Record<string, { execute?: (input: unknown) => Promise<unknown> }>;
+    };
+    expect(options.tools.sample_vocabulary).toBeUndefined();
+    await options.tools.sample_sentence_frame?.execute?.({ max_hsk_level: 3 });
+    await options.tools.sample_focus_structure?.execute?.({ max_hsk_level: 3 });
+    expect(frameExecute).toHaveBeenCalledWith({ max_hsk_level: 3, ids: [11] }, undefined);
+    expect(focusExecute).toHaveBeenCalledWith({ max_hsk_level: 3, ids: [12] }, undefined);
+  });
+
+  it("rejects a lesson without structure ids", async () => {
+    const request = new Request("http://localhost/api/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        messages: [{ id: "user-1", role: "user", parts: [{ type: "text", text: "hello" }] }],
+        lesson: true,
+        structureIds: [],
+      }),
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(400);
+    expect(connectMcp).not.toHaveBeenCalled();
   });
 });

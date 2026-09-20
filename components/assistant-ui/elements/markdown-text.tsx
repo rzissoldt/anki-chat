@@ -28,15 +28,14 @@ import { ChineseSentenceSpeakButton } from "@/components/assistant-ui/elements/c
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { DictionaryAnnotation } from "@/lib/dictionary/cedict";
-import {
-  buildTonePinyin,
-  getPlainText,
-  isChineseDominantLine,
-} from "@/lib/dictionary/pinyin";
+import { buildTonePinyin, getPlainText, isChineseDominantLine } from "@/lib/dictionary/pinyin";
+import type { GlossLanguage } from "@/lib/dictionary/language";
 import type { ChineseScript } from "@/lib/dictionary/script-convert";
 import { useScriptConvertStore } from "@/lib/dictionary/script-convert-store";
 import { extractSpeakableChineseSentences } from "@/lib/dictionary/sentences";
+import { hasHan, surfaceMatchesAt } from "@/lib/dictionary/text";
 import { useGlossStore } from "@/lib/dictionary/gloss-store";
+import { preprocessGrammarHints } from "@/lib/grammar-hints";
 import { cn } from "@/lib/utils";
 
 type GlossContextValue = {
@@ -44,6 +43,7 @@ type GlossContextValue = {
   enableSpeak: boolean;
   showPinyin: boolean;
   chineseScript: ChineseScript;
+  glossLang: GlossLanguage;
   convertScript: (text: string) => string;
 };
 
@@ -52,6 +52,7 @@ const GlossContext = createContext<GlossContextValue>({
   enableSpeak: false,
   showPinyin: false,
   chineseScript: "simplified",
+  glossLang: "en",
   convertScript: (text) => text,
 });
 const EMPTY_SEGMENTS: DictionaryAnnotation[] = [];
@@ -61,6 +62,7 @@ const MarkdownTextImpl = ({
   messageText,
   enableSpeak = false,
   showPinyin = false,
+  showGrammarTips = true,
   chineseScript = "simplified",
   enableScriptConvert = true,
 }: {
@@ -68,11 +70,11 @@ const MarkdownTextImpl = ({
   messageText: string;
   enableSpeak?: boolean;
   showPinyin?: boolean;
+  showGrammarTips?: boolean;
   chineseScript?: ChineseScript;
   /** False while streaming so OpenCC runs on the finished message (full phrase context). */
   enableScriptConvert?: boolean;
 }) => {
-  const scriptStatus = useScriptConvertStore((state) => state.status);
   const convert = useScriptConvertStore((state) => state.convert);
   const ensureLoaded = useScriptConvertStore((state) => state.ensureLoaded);
 
@@ -81,8 +83,7 @@ const MarkdownTextImpl = ({
   }, [ensureLoaded]);
 
   const convertScript = useMemo(
-    () => (text: string) =>
-      enableScriptConvert ? convert(text, chineseScript) : text,
+    () => (text: string) => (enableScriptConvert ? convert(text, chineseScript) : text),
     [convert, chineseScript, enableScriptConvert],
   );
   // Annotate the raw model text once; convert gloss surfaces to match the
@@ -93,14 +94,22 @@ const MarkdownTextImpl = ({
     if (raw.length === 0) return EMPTY_SEGMENTS;
     let changed = false;
     const next = raw.map((segment) => {
-      const surface = convertScript(segment.surface);
-      if (surface === segment.surface) return segment;
+      if (hasHan(segment.surface)) {
+        const surface = convertScript(segment.surface);
+        if (surface === segment.surface) return segment;
+        changed = true;
+        return { ...segment, surface };
+      }
+
+      const definitions = segment.definitions.map((definition) => convertScript(definition));
+      if (definitions.every((definition, index) => definition === segment.definitions[index])) {
+        return segment;
+      }
       changed = true;
-      return { ...segment, surface };
+      return { ...segment, definitions };
     });
     return changed ? next : raw;
   }, [convertScript, glossEntry?.segments]);
-  const glossRevision = glossEntry?.status === "ready" ? glossEntry.requestId : 0;
   const value = useMemo<GlossContextValue>(() => {
     const bySurface = new Map<string, DictionaryAnnotation>();
     for (const segment of segments) {
@@ -111,20 +120,24 @@ const MarkdownTextImpl = ({
       enableSpeak,
       showPinyin,
       chineseScript,
+      glossLang: glossEntry?.lang ?? "en",
       convertScript,
     };
-  }, [chineseScript, convertScript, enableSpeak, segments, showPinyin]);
+  }, [chineseScript, convertScript, enableSpeak, glossEntry?.lang, segments, showPinyin]);
+
+  const preprocess = useMemo(
+    () => (text: string) => preprocessGrammarHints(text, showGrammarTips),
+    [showGrammarTips],
+  );
 
   return (
     <GlossContext.Provider value={value}>
       <MarkdownTextPrimitive
-        // react-markdown's renderer is memoized on text/components identity.
-        // Remount when dictionary glosses arrive, pinyin visibility, or script changes.
-        key={`gloss-${glossRevision}-py-${showPinyin ? "1" : "0"}-sc-${chineseScript}-${scriptStatus}-${enableScriptConvert ? "1" : "0"}`}
         remarkPlugins={[remarkGfm]}
         className="aui-md"
         components={defaultComponents}
-        defer={glossRevision === 0}
+        preprocess={preprocess}
+        smooth={false}
       />
     </GlossContext.Provider>
   );
@@ -132,32 +145,43 @@ const MarkdownTextImpl = ({
 
 export const MarkdownText = memo(MarkdownTextImpl);
 
-const ChineseGloss = ({ annotation }: { annotation: DictionaryAnnotation }) => (
-  <Tooltip>
-    <TooltipTrigger
-      delay={200}
-      render={
-        <button
-          type="button"
-          lang="zh"
-          className="decoration-primary/60 hover:decoration-primary focus-visible:ring-ring m-0 inline cursor-help border-0 bg-transparent p-0 font-inherit text-inherit underline decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-        />
-      }
-    >
-      {annotation.surface}
-    </TooltipTrigger>
-    <TooltipContent side="bottom" align="start" className="block max-w-80 px-3 py-2 text-left">
-      <span className="block text-sm font-semibold">{annotation.surface}</span>
-      <span className="block opacity-75">{annotation.pinyin}</span>
-      <span className="mt-1 block">{annotation.definitions.slice(0, 3).join("; ")}</span>
-    </TooltipContent>
-  </Tooltip>
-);
+const WordGloss = ({ annotation }: { annotation: DictionaryAnnotation }) => {
+  const { glossLang } = useContext(GlossContext);
+  const chineseSurface = hasHan(annotation.surface);
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={200}
+        render={
+          <button
+            type="button"
+            lang={chineseSurface ? "zh" : glossLang}
+            className="decoration-primary/60 hover:decoration-primary focus-visible:ring-ring m-0 inline cursor-help border-0 bg-transparent p-0 font-inherit text-inherit underline decoration-dotted underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+          />
+        }
+      >
+        {annotation.surface}
+      </TooltipTrigger>
+      <TooltipContent side="bottom" align="start" className="block max-w-80 px-3 py-2 text-left">
+        <span className="block text-sm font-semibold">{annotation.surface}</span>
+        <span className="block opacity-75">{annotation.pinyin}</span>
+        <span className="mt-1 block" lang={chineseSurface ? undefined : "zh"}>
+          {annotation.definitions.slice(0, 3).join("; ")}
+        </span>
+      </TooltipContent>
+    </Tooltip>
+  );
+};
 
 function AnnotatedChildren({ children }: { children: ReactNode }) {
   const { segments, enableSpeak, convertScript } = useContext(GlossContext);
   return annotateNode(children, segments, enableSpeak, convertScript);
 }
+
+type MarkdownElementProps = {
+  children?: ReactNode;
+  node?: { tagName?: string };
+};
 
 function annotateNode(
   node: ReactNode,
@@ -169,18 +193,21 @@ function annotateNode(
   if (typeof node === "string") return annotateText(node, segments, enableSpeak, convertScript);
   if (typeof node === "number") return node;
   if (Array.isArray(node)) {
-    return Children.map(node, (child) =>
-      annotateNode(child, segments, enableSpeak, convertScript),
-    );
+    return Children.map(node, (child) => annotateNode(child, segments, enableSpeak, convertScript));
   }
   if (
-    !isValidElement<{ children?: ReactNode }>(node) ||
-    node.type === ChineseGloss ||
+    !isValidElement<MarkdownElementProps>(node) ||
+    node.type === WordGloss ||
     node.type === ChineseSentenceSpeakButton
   ) {
     return node;
   }
-  if (node.type === "code" || (typeof node.type === "function" && node.type.name === "Code")) {
+  const tagName = node.props.node?.tagName;
+  // Grammar tips are italic markdown; keep them as plain text, not gloss buttons.
+  if (node.type === "em" || node.type === "i" || tagName === "em" || tagName === "i") {
+    return node;
+  }
+  if (node.type === "code" || tagName === "code") {
     return node;
   }
   if (node.props.children === undefined) return node;
@@ -207,9 +234,9 @@ function annotateText(
   let cursor = 0;
 
   while (cursor < converted.length) {
-    const word = segments.find((item) => converted.startsWith(item.surface, cursor));
+    const word = segments.find((item) => surfaceMatchesAt(converted, item.surface, cursor));
     if (word) {
-      output.push(<ChineseGloss key={`w-${cursor}-${word.surface}`} annotation={word} />);
+      output.push(<WordGloss key={`w-${cursor}-${word.surface}`} annotation={word} />);
       cursor += word.surface.length;
       const ended = speakable.find((sentence) => sentence.end === cursor);
       if (ended) {
@@ -352,15 +379,25 @@ const defaultComponents = memoizeMarkdownComponents({
       </p>
     );
   },
-  a: ({ className, ...props }) => (
+  a: ({ className, href, children, ...props }) => (
     <a
       className={cn(
         "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
         className,
       )}
+      href={href}
       {...props}
-    />
+    >
+      {children}
+    </a>
   ),
+  em: function Emphasis({ className, children, ...props }) {
+    return (
+      <em className={cn("text-muted-foreground font-normal", className)} {...props}>
+        {children}
+      </em>
+    );
+  },
   blockquote: ({ className, children, ...props }) => (
     <blockquote
       className={cn(

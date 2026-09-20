@@ -4,6 +4,7 @@ import { ContextUsageIndicator } from "@/components/assistant-ui/elements/contex
 import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import { ToolFallback } from "@/components/assistant-ui/elements/tool-fallback.aui";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
+import { PracticeQuickActions } from "@/components/assistant-ui/elements/practice-quick-actions";
 import { Button } from "@/components/ui/button";
 import { useGlossStore } from "@/lib/dictionary/gloss-store";
 import { detectGlossLanguage, glossLanguageFromNavigator } from "@/lib/dictionary/language";
@@ -48,7 +49,11 @@ export type ThreadProps = {
   onHskLevelChange: (level: HskLevel) => void;
   showPinyin: boolean;
   onShowPinyinChange: (show: boolean) => void;
+  showGrammarTips: boolean;
+  onShowGrammarTipsChange: (show: boolean) => void;
   dictationAdapter?: ApiDictationAdapter;
+  hideComposerOptions?: boolean;
+  isLesson?: boolean;
 };
 
 // Startup exposes a loading placeholder thread; treat it as a new chat so
@@ -97,7 +102,11 @@ export const Thread: FC<ThreadProps> = ({
   onHskLevelChange,
   showPinyin,
   onShowPinyinChange,
+  showGrammarTips,
+  onShowGrammarTipsChange,
   dictationAdapter,
+  hideComposerOptions = false,
+  isLesson = false,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
 
@@ -123,7 +132,7 @@ export const Thread: FC<ThreadProps> = ({
           )}
         >
           <AuiIf condition={isNewChatView}>
-            <ThreadWelcome />
+            <ThreadWelcome isLesson={isLesson} />
           </AuiIf>
           <AuiIf condition={isHistoryLoadingView}>
             <ThreadHistorySkeleton />
@@ -136,6 +145,7 @@ export const Thread: FC<ThreadProps> = ({
                   enableTts={enableTts}
                   enableReasoning={enableReasoning}
                   showPinyin={showPinyin}
+                  showGrammarTips={showGrammarTips}
                   chineseScript={chineseScript}
                 />
               )}
@@ -158,7 +168,10 @@ export const Thread: FC<ThreadProps> = ({
               onHskLevelChange={onHskLevelChange}
               showPinyin={showPinyin}
               onShowPinyinChange={onShowPinyinChange}
+              showGrammarTips={showGrammarTips}
+              onShowGrammarTipsChange={onShowGrammarTipsChange}
               dictationAdapter={dictationAdapter}
+              hideComposerOptions={hideComposerOptions}
             />
           </ThreadPrimitive.ViewportFooter>
         </div>
@@ -171,8 +184,9 @@ const ThreadMessage: FC<{
   enableTts: boolean;
   enableReasoning: boolean;
   showPinyin: boolean;
+  showGrammarTips: boolean;
   chineseScript: ChineseScript;
-}> = ({ enableTts, enableReasoning, showPinyin, chineseScript }) => {
+}> = ({ enableTts, enableReasoning, showPinyin, showGrammarTips, chineseScript }) => {
   const role = useAuiState((s) => s.message.role);
   const isEditing = useAuiState((s) => s.message.composer.isEditing);
 
@@ -183,6 +197,7 @@ const ThreadMessage: FC<{
       enableTts={enableTts}
       enableReasoning={enableReasoning}
       showPinyin={showPinyin}
+      showGrammarTips={showGrammarTips}
       chineseScript={chineseScript}
     />
   );
@@ -202,15 +217,16 @@ const ThreadScrollToBottom: FC = () => {
   );
 };
 
-const ThreadWelcome: FC = () => {
+const ThreadWelcome: FC<{ isLesson: boolean }> = ({ isLesson }) => {
   return (
     <div className="aui-thread-welcome-root mb-6 flex flex-col items-center px-4 text-center">
       <h1 className="aui-thread-welcome-message-inner fade-in slide-in-from-bottom-1 animate-in fill-mode-both text-2xl font-medium tracking-tight duration-200">
-        Start practicing
+        {isLesson ? "Start this lesson" : "Start practicing"}
       </h1>
       <p className="text-muted-foreground mt-2 max-w-md text-sm">
-        Chat with your language learning assistant. Tool calls and thinking show up inline when the
-        backend provides them.
+        {isLesson
+          ? "Übungssätze folgen der Lesson-Konfiguration. Richtung wählst du über Schnellstart."
+          : "Chat with your language learning assistant. Tool calls and thinking show up inline when the backend provides them."}
       </p>
     </div>
   );
@@ -225,7 +241,10 @@ const Composer: FC<{
   onHskLevelChange: (level: HskLevel) => void;
   showPinyin: boolean;
   onShowPinyinChange: (show: boolean) => void;
+  showGrammarTips: boolean;
+  onShowGrammarTipsChange: (show: boolean) => void;
   dictationAdapter?: ApiDictationAdapter;
+  hideComposerOptions: boolean;
 }> = ({
   enableStt,
   maxContext,
@@ -235,7 +254,10 @@ const Composer: FC<{
   onHskLevelChange,
   showPinyin,
   onShowPinyinChange,
+  showGrammarTips,
+  onShowGrammarTipsChange,
   dictationAdapter,
+  hideComposerOptions,
 }) => {
   const { send, canSend } = unstable_useComposerInput();
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -270,6 +292,7 @@ const Composer: FC<{
         data-slot="aui_composer-shell"
         className="border-border/60 focus-within:border-border dark:border-muted-foreground/15 dark:focus-within:border-muted-foreground/30 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) transition-[border-color]"
       >
+        <PracticeQuickActions />
         <ComposerPrimitive.Input
           placeholder="Message..."
           className="aui-composer-input placeholder:text-muted-foreground/60 max-h-48 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-base leading-6 outline-none"
@@ -287,10 +310,13 @@ const Composer: FC<{
           onHskLevelChange={onHskLevelChange}
           showPinyin={showPinyin}
           onShowPinyinChange={onShowPinyinChange}
+          showGrammarTips={showGrammarTips}
+          onShowGrammarTipsChange={onShowGrammarTipsChange}
           dictationAdapter={dictationAdapter}
           autoSendAfterVoice={autoSendAfterVoice}
           onAutoSendAfterVoiceChange={setAutoSendAfterVoice}
           onAudioError={handleAudioError}
+          hideComposerOptions={hideComposerOptions}
         />
       </div>
       {audioError ? (
@@ -312,10 +338,13 @@ const ComposerAction: FC<{
   onHskLevelChange: (level: HskLevel) => void;
   showPinyin: boolean;
   onShowPinyinChange: (show: boolean) => void;
+  showGrammarTips: boolean;
+  onShowGrammarTipsChange: (show: boolean) => void;
   dictationAdapter?: ApiDictationAdapter;
   autoSendAfterVoice: boolean;
   onAutoSendAfterVoiceChange: (enabled: boolean) => void;
   onAudioError: (message: string | null) => void;
+  hideComposerOptions: boolean;
 }> = ({
   enableStt,
   disabled,
@@ -326,74 +355,101 @@ const ComposerAction: FC<{
   onHskLevelChange,
   showPinyin,
   onShowPinyinChange,
+  showGrammarTips,
+  onShowGrammarTipsChange,
   dictationAdapter,
   autoSendAfterVoice,
   onAutoSendAfterVoiceChange,
   onAudioError,
+  hideComposerOptions,
 }) => {
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
       <div className="flex min-h-8 flex-wrap items-center gap-3">
-        <fieldset
-          className="border-border/60 text-muted-foreground flex items-center rounded-md border p-0.5 text-sm disabled:opacity-50"
-          disabled={disabled}
-          aria-label="Chinese character set"
-        >
-          {(["simplified", "traditional"] as const).map((script) => (
+        {hideComposerOptions ? null : (
+          <div className="contents">
+            <fieldset
+              className="border-border/60 text-muted-foreground flex items-center rounded-md border p-0.5 text-sm disabled:opacity-50"
+              disabled={disabled}
+              aria-label="Chinese character set"
+            >
+              {(["simplified", "traditional"] as const).map((script) => (
+                <label
+                  key={script}
+                  title={script === "simplified" ? "Simplified Chinese" : "Traditional Chinese"}
+                  className="cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    name="chinese-script"
+                    value={script}
+                    checked={chineseScript === script}
+                    onChange={() => onChineseScriptChange(script)}
+                    aria-label={
+                      script === "simplified" ? "Simplified Chinese" : "Traditional Chinese"
+                    }
+                    className="peer sr-only"
+                  />
+                  <span className="hover:text-foreground peer-checked:bg-accent peer-checked:text-foreground peer-focus-visible:ring-ring flex size-6 items-center justify-center rounded-sm transition-colors peer-focus-visible:ring-2">
+                    {script === "simplified" ? "简" : "繁"}
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <label className="text-muted-foreground flex items-center gap-1.5 text-xs">
+              <span className="sr-only">Maximum sentence structure level</span>
+              <select
+                value={hskLevel}
+                onChange={(event) => onHskLevelChange(Number(event.target.value) as HskLevel)}
+                disabled={disabled}
+                aria-label="Maximum HSK level for sentence structures"
+                className="border-border/60 bg-background hover:text-foreground h-7 cursor-pointer rounded-md border px-2 outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {HSK_LEVELS.map((level) => (
+                  <option key={level} value={level}>
+                    {formatHskLevel(level)}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label
-              key={script}
-              title={script === "simplified" ? "Simplified Chinese" : "Traditional Chinese"}
-              className="cursor-pointer"
+              className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
+              title={
+                showPinyin
+                  ? "Pinyin unter chinesischen Zeilen ausblenden"
+                  : "Pinyin unter chinesischen Zeilen einblenden"
+              }
             >
               <input
-                type="radio"
-                name="chinese-script"
-                value={script}
-                checked={chineseScript === script}
-                onChange={() => onChineseScriptChange(script)}
-                aria-label={script === "simplified" ? "Simplified Chinese" : "Traditional Chinese"}
-                className="peer sr-only"
+                type="checkbox"
+                checked={showPinyin}
+                onChange={(event) => onShowPinyinChange(event.target.checked)}
+                disabled={disabled}
+                aria-label="Pinyin unter chinesischen Zeilen ein- oder ausblenden"
+                className="border-border/60 accent-foreground size-3.5 cursor-pointer rounded-sm disabled:cursor-not-allowed"
               />
-              <span className="hover:text-foreground peer-checked:bg-accent peer-checked:text-foreground peer-focus-visible:ring-ring flex size-6 items-center justify-center rounded-sm transition-colors peer-focus-visible:ring-2">
-                {script === "simplified" ? "简" : "繁"}
-              </span>
+              <span className="select-none">拼音</span>
             </label>
-          ))}
-        </fieldset>
-        <label className="text-muted-foreground flex items-center gap-1.5 text-xs">
-          <span className="sr-only">Maximum sentence structure level</span>
-          <select
-            value={hskLevel}
-            onChange={(event) => onHskLevelChange(Number(event.target.value) as HskLevel)}
-            disabled={disabled}
-            aria-label="Maximum HSK level for sentence structures"
-            className="border-border/60 bg-background hover:text-foreground h-7 cursor-pointer rounded-md border px-2 outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {HSK_LEVELS.map((level) => (
-              <option key={level} value={level}>
-                {formatHskLevel(level)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label
-          className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
-          title={
-            showPinyin
-              ? "Pinyin unter chinesischen Zeilen ausblenden"
-              : "Pinyin unter chinesischen Zeilen einblenden"
-          }
-        >
-          <input
-            type="checkbox"
-            checked={showPinyin}
-            onChange={(event) => onShowPinyinChange(event.target.checked)}
-            disabled={disabled}
-            aria-label="Pinyin unter chinesischen Zeilen ein- oder ausblenden"
-            className="border-border/60 accent-foreground size-3.5 cursor-pointer rounded-sm disabled:cursor-not-allowed"
-          />
-          <span className="select-none">拼音</span>
-        </label>
+            <label
+              className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
+              title={
+                showGrammarTips
+                  ? "Grammatiktipps bei Übungssätzen ausblenden"
+                  : "Grammatiktipps bei Übungssätzen einblenden"
+              }
+            >
+              <input
+                type="checkbox"
+                checked={showGrammarTips}
+                onChange={(event) => onShowGrammarTipsChange(event.target.checked)}
+                disabled={disabled}
+                aria-label="Grammatiktipps bei Übungssätzen ein- oder ausblenden"
+                className="border-border/60 accent-foreground size-3.5 cursor-pointer rounded-sm disabled:cursor-not-allowed"
+              />
+              <span className="select-none">语法</span>
+            </label>
+          </div>
+        )}
         {enableStt ? (
           <label
             className="text-muted-foreground flex cursor-pointer items-center gap-1.5 text-xs has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50"
@@ -467,8 +523,9 @@ const AssistantMessage: FC<{
   enableTts: boolean;
   enableReasoning: boolean;
   showPinyin: boolean;
+  showGrammarTips: boolean;
   chineseScript: ChineseScript;
-}> = ({ enableTts, enableReasoning, showPinyin, chineseScript }) => {
+}> = ({ enableTts, enableReasoning, showPinyin, showGrammarTips, chineseScript }) => {
   const ACTION_BAR_PT = "pt-1.5";
   const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`;
   const messageId = useAuiState((s) => s.message.id);
@@ -527,6 +584,7 @@ const AssistantMessage: FC<{
                   messageText={messageText}
                   enableSpeak={enableTts}
                   showPinyin={showPinyin}
+                  showGrammarTips={showGrammarTips}
                   chineseScript={chineseScript}
                   enableScriptConvert={messageStatus !== "running"}
                 />

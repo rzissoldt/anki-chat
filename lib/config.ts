@@ -23,6 +23,7 @@ const serverEnvSchema = z.object({
   MCP_TIMEOUT_MS: z.coerce.number().int().positive().default(15_000),
   AGENT_MAX_STEPS: z.coerce.number().int().min(1).max(50).default(10),
   CHAT_MAX_CONTEXT: z.coerce.number().int().positive().default(12_000),
+  STATS_API_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
 
   STT_API_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
   STT_API_KEY: z.preprocess(emptyToUndefined, z.string().optional()),
@@ -64,6 +65,10 @@ export type ServerConfig = {
     url?: string;
     authToken?: string;
     timeoutMs: number;
+    enabled: boolean;
+  };
+  stats: {
+    url?: string;
     enabled: boolean;
   };
   stt: {
@@ -137,6 +142,10 @@ export function getServerConfig(): ServerConfig {
       authToken: env.MCP_AUTH_TOKEN,
       timeoutMs: env.MCP_TIMEOUT_MS,
       enabled: Boolean(env.MCP_SERVER_URL),
+    },
+    stats: {
+      url: env.STATS_API_URL,
+      enabled: Boolean(env.STATS_API_URL),
     },
     stt: {
       url: env.STT_API_URL,

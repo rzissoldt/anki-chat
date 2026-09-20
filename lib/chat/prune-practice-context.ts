@@ -1,7 +1,11 @@
 import type { ModelMessage, UIMessage } from "ai";
 
 const EVAL_TOOL = "record_practice_evaluation";
-export const PRACTICE_SAMPLING_TOOLS = new Set(["sample_sentence_structure", "sample_vocabulary"]);
+export const PRACTICE_SAMPLING_TOOLS = new Set([
+  "sample_sentence_frame",
+  "sample_focus_structure",
+  "sample_vocabulary",
+]);
 
 function getPartToolName(part: UIMessage["parts"][number]): string | undefined {
   if (part.type === "dynamic-tool" && "toolName" in part && typeof part.toolName === "string") {

@@ -5,9 +5,11 @@ import {
   prunePracticeContext,
   stripHistoricalToolPayloads,
 } from "@/lib/chat/prune-practice-context";
+import { resolvePracticeDirectionForModel } from "@/lib/chat/practice-state";
 import { DEFAULT_HSK_LEVEL, isHskLevel, type HskLevel } from "@/lib/hsk-level";
+import { applyLessonTools } from "@/lib/lessons/tools";
 import { connectMcp } from "@/lib/mcp/client";
-import { systemPrompt } from "@/lib/system-prompt";
+import { buildSystemPrompt } from "@/lib/system-prompt";
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
@@ -15,6 +17,7 @@ import {
   streamText,
   toUIMessageStream,
   type LanguageModelUsage,
+  type ToolSet,
   type UIMessage,
 } from "ai";
 
@@ -26,26 +29,55 @@ type ClientChatBody = {
   messages?: UIMessage[];
   chineseScript?: unknown;
   hskLevel?: unknown;
+  grammarTips?: unknown;
+  lesson?: unknown;
+  ankiVocab?: unknown;
+  structureIds?: unknown;
+  frameIds?: unknown;
+  focusIds?: unknown;
 };
 
 type ChineseScript = "simplified" | "traditional";
+
+function parseStructureIds(value: unknown): number[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return null;
+  const ids: number[] = [];
+  for (const item of value) {
+    if (typeof item !== "number" || !Number.isInteger(item) || item < 1) return null;
+    if (!ids.includes(item)) ids.push(item);
+  }
+  return ids;
+}
 
 function prependUserControls(
   messages: UIMessage[],
   script: ChineseScript,
   hskLevel: HskLevel,
+  grammarTips: boolean,
+  practiceMode: ReturnType<typeof resolvePracticeDirectionForModel>,
+  lesson: { useAnkiVocab: boolean } | null,
 ): UIMessage[] {
   const lastUserMessageIndex = messages.findLastIndex((message) => message.role === "user");
+
+  const controlParts: Array<{ type: "text"; text: string }> = [
+    { type: "text", text: script },
+    { type: "text", text: `hsk-max: ${hskLevel}` },
+    { type: "text", text: `grammar-tips: ${grammarTips ? "on" : "off"}` },
+  ];
+  if (lesson) {
+    controlParts.push({ type: "text", text: "lesson: on" });
+    controlParts.push({ type: "text", text: `anki-vocab: ${lesson.useAnkiVocab ? "on" : "off"}` });
+  }
+  if (practiceMode) {
+    controlParts.push({ type: "text", text: `practice-mode: ${practiceMode}` });
+  }
 
   return messages.map((message, index) =>
     index === lastUserMessageIndex
       ? {
           ...message,
-          parts: [
-            { type: "text" as const, text: script },
-            { type: "text" as const, text: `hsk-max: ${hskLevel}` },
-            ...message.parts,
-          ],
+          parts: [...controlParts, ...message.parts],
         }
       : message,
   );
@@ -73,13 +105,56 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid HSK level" }, { status: 400 });
   }
 
+  const grammarTips = body.grammarTips ?? true;
+  if (typeof grammarTips !== "boolean") {
+    return Response.json({ error: "Invalid grammarTips flag" }, { status: 400 });
+  }
+
+  const lessonEnabled = body.lesson ?? false;
+  if (typeof lessonEnabled !== "boolean") {
+    return Response.json({ error: "Invalid lesson flag" }, { status: 400 });
+  }
+
+  const ankiVocab = body.ankiVocab ?? true;
+  if (typeof ankiVocab !== "boolean") {
+    return Response.json({ error: "Invalid ankiVocab flag" }, { status: 400 });
+  }
+
+  const structureIds = parseStructureIds(body.structureIds);
+  if (structureIds === null) {
+    return Response.json({ error: "Invalid structureIds" }, { status: 400 });
+  }
+
+  const frameIds = parseStructureIds(body.frameIds);
+  if (frameIds === null) {
+    return Response.json({ error: "Invalid frameIds" }, { status: 400 });
+  }
+
+  const focusIds = parseStructureIds(body.focusIds);
+  if (focusIds === null) {
+    return Response.json({ error: "Invalid focusIds" }, { status: 400 });
+  }
+
+  if (lessonEnabled && structureIds.length === 0) {
+    return Response.json({ error: "Lesson requires at least one structure id" }, { status: 400 });
+  }
+
+  const lesson = lessonEnabled
+    ? {
+        useAnkiVocab: ankiVocab,
+        structureIds,
+        frameIds,
+        focusIds,
+      }
+    : null;
+
   let mcp: Awaited<ReturnType<typeof connectMcp>> = null;
 
   try {
     const config = getServerConfig();
     const model = createVllmModel(config);
     mcp = await connectMcp(config, req.signal);
-    const tools = mcp?.tools ?? {};
+    const tools = applyLessonTools((mcp?.tools ?? {}) as ToolSet, lesson) as ToolSet;
 
     let closed = false;
     const closeMcp = async () => {
@@ -90,11 +165,20 @@ export async function POST(req: Request) {
       });
     };
 
+    const practiceMode = resolvePracticeDirectionForModel(body.messages);
+
     const result = streamText({
       model,
-      system: systemPrompt,
+      system: buildSystemPrompt(Boolean(lesson)),
       messages: await convertToModelMessages(
-        prependUserControls(prunePracticeContext(body.messages), chineseScript, hskLevel),
+        prependUserControls(
+          prunePracticeContext(body.messages),
+          chineseScript,
+          hskLevel,
+          grammarTips,
+          practiceMode,
+          lesson,
+        ),
       ),
       tools,
       stopWhen: stepCountIs(config.chat.maxSteps),

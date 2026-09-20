@@ -62,10 +62,14 @@ make dict-download
 `dict:download` refreshes the local dictionaries at `data/cedict_ts.u8`
 (Chinese-English) and `data/handedict.u8` (Chinese-German). Chat remains
 independent from the dictionary endpoint, but hover definitions are unavailable
-when these files are missing. After each assistant reply finishes streaming,
-Chinese text is segmented with `jieba-wasm` and each word is looked up locally
-(no extra model call). Gloss language is chosen with a cheap heuristic over
-recent user messages (`de` → HanDeDict, otherwise CC-CEDICT).
+when these files are missing. Chinese hover definitions use local dictionaries only
+(`jieba-wasm` + CC-CEDICT / HanDeDict). Production-mode German or English
+practice lines get a separate short vLLM structured-output call after the
+assistant message finishes streaming (thinking disabled) so glosses match
+sentence context. Gloss language is chosen with a cheap heuristic over
+recent user messages (`de` → HanDeDict for Chinese glosses / German prompts,
+otherwise CC-CEDICT). If the contextual gloss call fails, German hover
+segments are omitted rather than falling back to reverse dictionary lookup.
 
 Downloaded dictionary files are ignored by Git and excluded from the Docker
 build context. The image always obtains them through the download script.
@@ -77,6 +81,8 @@ build context. The image always obtains them through the download script.
 - `CHAT_API_KEY` (optional): model API key.
 - `CHAT_ENABLE_THINKING` (optional): sends
   `chat_template_kwargs.enable_thinking` to vLLM; defaults to `true`.
+  Skipped automatically for Gemini’s OpenAI-compatible host
+  (`generativelanguage.googleapis.com`), which rejects that field.
 - `CHAT_AUTH_HEADER` / `CHAT_AUTH_SCHEME` (optional): custom model auth.
 - `MCP_SERVER_URL` (optional): external Streamable HTTP MCP endpoint. Without
   it, chat still works without tools.
@@ -114,11 +120,15 @@ Secrets must never use the `NEXT_PUBLIC_` prefix.
 
 ## Dictionary data
 
-Chinese hover definitions use local dictionaries only:
+Hover definitions:
 
-- [CC-CEDICT](https://www.mdbg.net/chinese/dictionary?page=cc-cedict) (EN),
-  [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
-- [HanDeDict](https://github.com/gugray/HanDeDict) (DE),
+- Chinese: local dictionaries only — [CC-CEDICT](https://www.mdbg.net/chinese/dictionary?page=cc-cedict) (EN),
+  [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/);
+  [HanDeDict](https://github.com/gugray/HanDeDict) (DE),
   [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/)
+- Production L1 practice lines: short structured-output call on the configured
+  chat model (contextual German/English → Chinese)
 
-Lookup requests do not call an external service or the chat model.
+Chinese words look up forward (headword → gloss).
+Lookup requests do not call an external service for Chinese segmentation;
+contextual L1 glosses use the configured chat model only.
