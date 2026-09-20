@@ -7,6 +7,11 @@ import {
 } from "@/lib/chat/prune-practice-context";
 import { resolvePracticeDirectionForModel } from "@/lib/chat/practice-state";
 import { DEFAULT_HSK_LEVEL, isHskLevel, type HskLevel } from "@/lib/hsk-level";
+import {
+  DEFAULT_SENTENCE_LENGTH,
+  isSentenceLength,
+  type SentenceLength,
+} from "@/lib/lessons/types";
 import { applyLessonTools } from "@/lib/lessons/tools";
 import { connectMcp } from "@/lib/mcp/client";
 import { buildSystemPrompt } from "@/lib/system-prompt";
@@ -32,6 +37,7 @@ type ClientChatBody = {
   grammarTips?: unknown;
   lesson?: unknown;
   ankiVocab?: unknown;
+  sentenceLength?: unknown;
   structureIds?: unknown;
   frameIds?: unknown;
   focusIds?: unknown;
@@ -56,7 +62,7 @@ function prependUserControls(
   hskLevel: HskLevel,
   grammarTips: boolean,
   practiceMode: ReturnType<typeof resolvePracticeDirectionForModel>,
-  lesson: { useAnkiVocab: boolean } | null,
+  lesson: { useAnkiVocab: boolean; sentenceLength: SentenceLength } | null,
 ): UIMessage[] {
   const lastUserMessageIndex = messages.findLastIndex((message) => message.role === "user");
 
@@ -68,6 +74,7 @@ function prependUserControls(
   if (lesson) {
     controlParts.push({ type: "text", text: "lesson: on" });
     controlParts.push({ type: "text", text: `anki-vocab: ${lesson.useAnkiVocab ? "on" : "off"}` });
+    controlParts.push({ type: "text", text: `sentence-length: ${lesson.sentenceLength}` });
   }
   if (practiceMode) {
     controlParts.push({ type: "text", text: `practice-mode: ${practiceMode}` });
@@ -120,6 +127,11 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid ankiVocab flag" }, { status: 400 });
   }
 
+  const sentenceLength = body.sentenceLength ?? DEFAULT_SENTENCE_LENGTH;
+  if (!isSentenceLength(sentenceLength)) {
+    return Response.json({ error: "Invalid sentenceLength" }, { status: 400 });
+  }
+
   const structureIds = parseStructureIds(body.structureIds);
   if (structureIds === null) {
     return Response.json({ error: "Invalid structureIds" }, { status: 400 });
@@ -142,6 +154,7 @@ export async function POST(req: Request) {
   const lesson = lessonEnabled
     ? {
         useAnkiVocab: ankiVocab,
+        sentenceLength,
         structureIds,
         frameIds,
         focusIds,

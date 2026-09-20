@@ -1,5 +1,6 @@
 "use client";
 
+import { SentenceLengthSlider } from "@/components/lessons/sentence-length-slider";
 import { StructurePicker } from "@/components/lessons/structure-picker";
 import { Button } from "@/components/ui/button";
 import {
@@ -121,9 +122,7 @@ export function LessonDialog({
       const enabledFamilies = enabled
         ? [...new Set([...current.enabledFamilies, family])]
         : current.enabledFamilies.filter((item) => item !== family);
-      const familyIds = new Set(
-        structures.filter((s) => s.family === family).map((s) => s.id),
-      );
+      const familyIds = new Set(structures.filter((s) => s.family === family).map((s) => s.id));
       const excludedStructureIds = enabled
         ? current.excludedStructureIds.filter((id) => !familyIds.has(id))
         : current.excludedStructureIds;
@@ -230,6 +229,11 @@ export function LessonDialog({
               <span>Anki-Vokabeln</span>
             </label>
           </div>
+
+          <SentenceLengthSlider
+            value={config.sentenceLength}
+            onChange={(sentenceLength) => setConfig((current) => ({ ...current, sentenceLength }))}
+          />
 
           {loading ? (
             <p className="text-muted-foreground text-sm">Lade Grammatikstrukturen…</p>

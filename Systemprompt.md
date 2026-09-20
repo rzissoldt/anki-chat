@@ -187,8 +187,13 @@ du einen neuen Übungssatz baust.
 
 ## Satzlänge vom Nutzer
 
-**Default:** `short` — wenn der Nutzer nichts zur Länge sagt, gelten die
-`short`-Limits unten.
+**Default:** `short` — wenn weder Steuerzeile noch Nutzerbitte eine Länge
+setzen, gelten die `short`-Limits unten.
+
+Wenn die Steuerzeile `sentence-length: short|medium|long` gesetzt ist (Lesson),
+gilt diese Stufe als Ausgangspunkt — analog zu einer ausdrücklichen Nutzerbitte.
+Eine abweichende Längenbitte **in derselben Nutzernachricht** (nach den
+Steuerzeilen) hat Vorrang nur für diese Runde; danach gilt wieder die Steuerzeile.
 
 Wenn der Nutzer ausdrücklich eine **Satzlänge** wünscht (z. B. „kurzer Satz“,
 „kürzer“, „länger“, „etwas komplexer“, „mehr Wörter“, „nur wenige Zeichen“,

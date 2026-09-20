@@ -9,8 +9,8 @@ import type { ChineseScript } from "@/lib/dictionary/script-convert";
 import { useScriptConvertStore } from "@/lib/dictionary/script-convert-store";
 import { DEFAULT_HSK_LEVEL, type HskLevel } from "@/lib/hsk-level";
 import { selectActiveLesson, useLessonStore } from "@/lib/lessons/store";
-import type { LessonConfig } from "@/lib/lessons/types";
-import { lessonHskLevel } from "@/lib/lessons/types";
+import type { LessonConfig, SentenceLength } from "@/lib/lessons/types";
+import { DEFAULT_SENTENCE_LENGTH, lessonHskLevel } from "@/lib/lessons/types";
 import { ApiDictationAdapter } from "@/lib/stt/dictation-adapter";
 import { cn } from "@/lib/utils";
 import { AssistantChatTransport, useChatRuntime } from "@assistant-ui/ai-sdk";
@@ -112,6 +112,8 @@ function ChatShell({
   dictationAdapter,
   hideComposerOptions,
   isLesson,
+  sentenceLength,
+  onSentenceLengthChange,
 }: {
   enableStt: boolean;
   enableTts: boolean;
@@ -128,6 +130,8 @@ function ChatShell({
   dictationAdapter?: ApiDictationAdapter;
   hideComposerOptions: boolean;
   isLesson: boolean;
+  sentenceLength: SentenceLength;
+  onSentenceLengthChange: (value: SentenceLength) => void;
 }) {
   return (
     <Thread
@@ -146,6 +150,8 @@ function ChatShell({
       dictationAdapter={dictationAdapter}
       hideComposerOptions={hideComposerOptions}
       isLesson={isLesson}
+      sentenceLength={sentenceLength}
+      onSentenceLengthChange={onSentenceLengthChange}
     />
   );
 }
@@ -292,6 +298,7 @@ function AppShell({
   const effectiveHsk = activeLesson ? lessonHskLevel(activeLesson.config) : hskLevel;
   const effectivePinyin = activeLesson?.config.showPinyin ?? showPinyin;
   const effectiveGrammar = activeLesson?.config.showGrammarTips ?? showGrammarTips;
+  const effectiveSentenceLength = activeLesson?.config.sentenceLength ?? DEFAULT_SENTENCE_LENGTH;
 
   const handleLessonScriptChange = useCallback(
     (script: ChineseScript) => {
@@ -304,6 +311,16 @@ function AppShell({
       onChineseScriptChange(script);
     },
     [activeLesson, onChineseScriptChange, updateLesson],
+  );
+
+  const handleSentenceLengthChange = useCallback(
+    (sentenceLength: SentenceLength) => {
+      if (!activeLesson) return;
+      void updateLesson(activeLesson.id, {
+        config: { ...activeLesson.config, sentenceLength },
+      });
+    },
+    [activeLesson, updateLesson],
   );
 
   return (
@@ -360,6 +377,8 @@ function AppShell({
               dictationAdapter={dictationAdapter}
               hideComposerOptions={Boolean(activeLesson)}
               isLesson={Boolean(activeLesson)}
+              sentenceLength={effectiveSentenceLength}
+              onSentenceLengthChange={handleSentenceLengthChange}
             />
           ) : (
             <StatsPanel
@@ -432,6 +451,7 @@ export const Assistant = () => {
                 grammarTips: lesson.config.showGrammarTips,
                 lesson: true,
                 ankiVocab: lesson.config.useAnkiVocab,
+                sentenceLength: lesson.config.sentenceLength,
                 structureIds: lesson.config.selectedStructureIds,
                 frameIds: lesson.config.selectedFrameIds,
                 focusIds: lesson.config.selectedFocusIds,

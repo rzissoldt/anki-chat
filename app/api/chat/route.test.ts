@@ -522,6 +522,7 @@ describe("POST /api/chat", () => {
           { type: "text", text: "grammar-tips: on" },
           { type: "text", text: "lesson: on" },
           { type: "text", text: "anki-vocab: off" },
+          { type: "text", text: "sentence-length: short" },
           { type: "text", text: "Starte Übersetzung" },
         ],
       },
@@ -553,6 +554,40 @@ describe("POST /api/chat", () => {
         messages: [{ id: "user-1", role: "user", parts: [{ type: "text", text: "hello" }] }],
         lesson: true,
         structureIds: [],
+      }),
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(400);
+    expect(connectMcp).not.toHaveBeenCalled();
+  });
+
+  it("prepends the requested lesson sentence length", async () => {
+    const request = new Request("http://localhost/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ id: "user-1", role: "user", parts: [{ type: "text", text: "Weiter" }] }],
+        lesson: true,
+        structureIds: [1],
+        frameIds: [1],
+        sentenceLength: "long",
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(200);
+    const parts = convertToModelMessages.mock.calls[0]?.[0][0].parts as Array<{ text: string }>;
+    expect(parts.map((part) => part.text)).toContain("sentence-length: long");
+  });
+
+  it("rejects an invalid lesson sentence length", async () => {
+    const request = new Request("http://localhost/api/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        messages: [{ id: "user-1", role: "user", parts: [{ type: "text", text: "hello" }] }],
+        lesson: true,
+        structureIds: [1],
+        sentenceLength: "huge",
       }),
     });
     const response = await POST(request);

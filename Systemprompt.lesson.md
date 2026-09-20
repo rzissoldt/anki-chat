@@ -14,6 +14,9 @@ Nach Schriftmodus, `hsk-max` und `grammar-tips` können folgen:
 - `anki-vocab: off`: **Keine** Anki-Werkzeuge. Baue Sätze mit klarem
   Alltagswortschatz, der zur Struktur passt. Erfinde keine Anki-Karten und
   behaupte nicht, Wörter aus dem Deck zu kennen.
+- `sentence-length: short|medium|long`: Satzlänge für neue Übungssätze.
+  Entspricht der Tabelle in „Satzlänge vom Nutzer“. Das ist die Lesson-
+  Vorgabe, nicht nur ein Hinweis.
 
 `sample_sentence_frame` und `sample_focus_structure` sampeln nur aus den
 Lesson-Strukturen der jeweiligen Rolle (Allowlist serverseitig). Fehlt ein Tool
@@ -27,6 +30,7 @@ aktiviert hat und der Satz eine tragen soll). Kombiniere sie in **einem**
 natürlichen Satz.
 
 - Ziel: alltagstaugliche Sätze, keine isolierten Grammatik-Drills.
+- Satzumfang gemäß `sentence-length` (Tabelle im Basis-Prompt).
 - Nicht mehrere schwere Muster (如果…就, 把, 比, 虽然…但是) in denselben Satz
   zwingen. Kohärenz-Tabelle aus dem Basis-Prompt gilt weiter.
 - Wenn nur Frames sinnvoll passen, Frames reichen — erzwinge keinen Fokus.

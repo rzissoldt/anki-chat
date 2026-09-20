@@ -3,11 +3,27 @@ import type { StructureFamily, StructureRole } from "@/lib/grammar/types";
 import { isStructureFamily, isStructureRole } from "@/lib/grammar/types";
 import { isHskLevel, maxHskLevel, type HskLevel } from "@/lib/hsk-level";
 
+export const SENTENCE_LENGTHS = ["short", "medium", "long"] as const;
+export type SentenceLength = (typeof SENTENCE_LENGTHS)[number];
+export const DEFAULT_SENTENCE_LENGTH: SentenceLength = "short";
+
+export const SENTENCE_LENGTH_LABELS_DE: Record<SentenceLength, string> = {
+  short: "kurz",
+  medium: "mittel",
+  long: "lang",
+};
+
+export function isSentenceLength(value: unknown): value is SentenceLength {
+  return value === "short" || value === "medium" || value === "long";
+}
+
 export type LessonConfig = {
   chineseScript: ChineseScript;
   showPinyin: boolean;
   showGrammarTips: boolean;
   useAnkiVocab: boolean;
+  /** Target sentence complexity for new practice sentences. */
+  sentenceLength: SentenceLength;
   /**
    * When true (new lessons), selection is role/family + HSK max.
    * When false (pre-role IndexedDB lessons), selection is HSK-band opt-out.
@@ -40,6 +56,7 @@ export const DEFAULT_LESSON_CONFIG: LessonConfig = {
   showPinyin: true,
   showGrammarTips: true,
   useAnkiVocab: true,
+  sentenceLength: DEFAULT_SENTENCE_LENGTH,
   useRoleSelection: true,
   enabledHskLevels: [],
   enabledRoles: [],
@@ -87,6 +104,9 @@ export function normalizeLessonConfig(value: unknown): LessonConfig | null {
     showPinyin: config.showPinyin,
     showGrammarTips: config.showGrammarTips,
     useAnkiVocab: config.useAnkiVocab,
+    sentenceLength: isSentenceLength(config.sentenceLength)
+      ? config.sentenceLength
+      : DEFAULT_SENTENCE_LENGTH,
     useRoleSelection:
       typeof config.useRoleSelection === "boolean"
         ? config.useRoleSelection

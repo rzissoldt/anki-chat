@@ -5,11 +5,13 @@ import { MarkdownText } from "@/components/assistant-ui/elements/markdown-text";
 import { ToolFallback } from "@/components/assistant-ui/elements/tool-fallback.aui";
 import { TooltipIconButton } from "@/components/assistant-ui/elements/tooltip-icon-button";
 import { PracticeQuickActions } from "@/components/assistant-ui/elements/practice-quick-actions";
+import { SentenceLengthSlider } from "@/components/lessons/sentence-length-slider";
 import { Button } from "@/components/ui/button";
 import { useGlossStore } from "@/lib/dictionary/gloss-store";
 import { detectGlossLanguage, glossLanguageFromNavigator } from "@/lib/dictionary/language";
 import type { ChineseScript } from "@/lib/dictionary/script-convert";
 import { formatHskLevel, HSK_LEVELS, type HskLevel } from "@/lib/hsk-level";
+import type { SentenceLength } from "@/lib/lessons/types";
 import type { ApiDictationAdapter } from "@/lib/stt/dictation-adapter";
 import { useSttAutoSend } from "@/lib/stt/preferences";
 import { cn } from "@/lib/utils";
@@ -54,6 +56,8 @@ export type ThreadProps = {
   dictationAdapter?: ApiDictationAdapter;
   hideComposerOptions?: boolean;
   isLesson?: boolean;
+  sentenceLength?: SentenceLength;
+  onSentenceLengthChange?: (value: SentenceLength) => void;
 };
 
 // Startup exposes a loading placeholder thread; treat it as a new chat so
@@ -107,6 +111,8 @@ export const Thread: FC<ThreadProps> = ({
   dictationAdapter,
   hideComposerOptions = false,
   isLesson = false,
+  sentenceLength,
+  onSentenceLengthChange,
 }) => {
   const isEmpty = useAuiState(isNewChatView);
 
@@ -172,6 +178,8 @@ export const Thread: FC<ThreadProps> = ({
               onShowGrammarTipsChange={onShowGrammarTipsChange}
               dictationAdapter={dictationAdapter}
               hideComposerOptions={hideComposerOptions}
+              sentenceLength={sentenceLength}
+              onSentenceLengthChange={onSentenceLengthChange}
             />
           </ThreadPrimitive.ViewportFooter>
         </div>
@@ -245,6 +253,8 @@ const Composer: FC<{
   onShowGrammarTipsChange: (show: boolean) => void;
   dictationAdapter?: ApiDictationAdapter;
   hideComposerOptions: boolean;
+  sentenceLength?: SentenceLength;
+  onSentenceLengthChange?: (value: SentenceLength) => void;
 }> = ({
   enableStt,
   maxContext,
@@ -258,6 +268,8 @@ const Composer: FC<{
   onShowGrammarTipsChange,
   dictationAdapter,
   hideComposerOptions,
+  sentenceLength,
+  onSentenceLengthChange,
 }) => {
   const { send, canSend } = unstable_useComposerInput();
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -317,6 +329,8 @@ const Composer: FC<{
           onAutoSendAfterVoiceChange={setAutoSendAfterVoice}
           onAudioError={handleAudioError}
           hideComposerOptions={hideComposerOptions}
+          sentenceLength={sentenceLength}
+          onSentenceLengthChange={onSentenceLengthChange}
         />
       </div>
       {audioError ? (
@@ -345,6 +359,8 @@ const ComposerAction: FC<{
   onAutoSendAfterVoiceChange: (enabled: boolean) => void;
   onAudioError: (message: string | null) => void;
   hideComposerOptions: boolean;
+  sentenceLength?: SentenceLength;
+  onSentenceLengthChange?: (value: SentenceLength) => void;
 }> = ({
   enableStt,
   disabled,
@@ -362,11 +378,22 @@ const ComposerAction: FC<{
   onAutoSendAfterVoiceChange,
   onAudioError,
   hideComposerOptions,
+  sentenceLength,
+  onSentenceLengthChange,
 }) => {
   return (
     <div className="aui-composer-action-wrapper relative flex items-center justify-between">
       <div className="flex min-h-8 flex-wrap items-center gap-3">
-        {hideComposerOptions ? null : (
+        {hideComposerOptions ? (
+          sentenceLength && onSentenceLengthChange ? (
+            <SentenceLengthSlider
+              value={sentenceLength}
+              onChange={onSentenceLengthChange}
+              disabled={disabled}
+              compact
+            />
+          ) : null
+        ) : (
           <div className="contents">
             <fieldset
               className="border-border/60 text-muted-foreground flex items-center rounded-md border p-0.5 text-sm disabled:opacity-50"
